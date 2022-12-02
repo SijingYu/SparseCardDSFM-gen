@@ -37,6 +37,13 @@ function check_cb_symmetric(w::Vector{Float64})
     return true
 end
 
+function check_cb_symmetric_for_all(EdgesW::Vector{Vector{Float64}})
+    """
+    Check whether all weights of EdgesW are symmetric
+    """
+    return sum(check_cb_symmetric.(EdgesW)) == length(EdgesW)
+end
+
 function random_CombGad(k::Int64)
     """
     This generates a random combined cardinality-based gadget.
@@ -490,12 +497,14 @@ function AsymmetricSCB_to_Gadget(w, epsi, verbose = false)
     Lines, M, X, Y, Ranges = get_pwl_approx(w,epsi,false)
     b = zeros(length(X)-1)
 
+    l_first = Lines[1]
+    l_last = Lines[end]
+
+
+    z_0 = l_first(0)/k
+    z_k = l_last(k)/k
+
     for t = 1:length(X)-1
-        if M[t] == M[t+1]
-            @show r, M
-            @show X, Y
-            @show mlast
-        end
         x,y = line_intersection(M[t],M[t+1],X[t],X[t+1],Y[t],Y[t+1])
         b[t] = x
     end
@@ -504,6 +513,6 @@ function AsymmetricSCB_to_Gadget(w, epsi, verbose = false)
     for i = 1:length(a)
         a[i] = (M[i]- M[i+1])/k
     end
-    println(M)
-    return a,b
+
+    return a,b,z_0,z_k
 end

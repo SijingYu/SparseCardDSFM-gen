@@ -290,17 +290,29 @@ function eval_min_dircut(A,svec,tvec,S,T)
     return S, cutval
 end
 
+function z_ks(f_ks)
+    """
+    f_ks is length k vector of function value f(0), f(1), ..., f(k)
+    return a length k vector of f(i)/i for 0<= i <=k
+    """
+    k = length(f_ks)
+    return f_ks./collect(1:k)
+end
 
-
-function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
+function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true, f_ks)
     if length(epsilon) == 1
         K = maximum(length(e) for e in Edges)
         epsilon = epsilon*ones(K)
     end
+
+    g_size = maximum(maximum(e) for e in Edges)
+
     N = n
     I = Vector{Int64}()
     J = Vector{Int64}()
     W = Vector{Float64}()
+    sVec = zeros(g_size)
+    tVec = zeros(g_size)
 
     for i = 1:length(Edges)
         e = Edges[i]
@@ -313,7 +325,7 @@ function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
             wrong = length(w)
             right = k+1
             println("length(w) should be $right, but it's $wrong")
-            return
+            return 
         end
 
         if k == 2
@@ -321,13 +333,12 @@ function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
             push!(I,e[1])
             push!(J,e[2])
             push!(W,w[2])
-
             push!(I,e[2])
             push!(J,e[1])
             push!(W,w[2])
 
         else
-            a, b = AsymmetricSCB_to_Gadget(w,epsilon[k])
+            a, b, z0, zk = AsymmetricSCB_to_Gadget(w,epsilon[k])
 
             @assert(minimum(a) > 0)
             @assert(minimum(b) > 0)
@@ -339,6 +350,10 @@ function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
                     push!(I,v)
                     push!(J,N+1)
                     push!(W,a[j]*(k-b[j]))
+                    
+                    sVec[v] = sVec[v] + z_0
+                    tVec[v] = tVec[v] + z_k
+
                     push!(I,N+1)
                     push!(J,v)
                     push!(W,a[j]*b[j])
@@ -349,8 +364,8 @@ function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
     end
     A = sparse(I,J,W,N,N)
     if returnIJV
-        return A,I,J,W
+        return A,I,J,W, sVec, tVec
     else
-        return A
+        return A, sVec, tVec
     end
 end

@@ -31,6 +31,8 @@ function SparseCardHyperLocal(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrix
     order::Vector{Int64},d::Vector{Float64},R::Vector{Int64},
     epsilon::Float64,Rs_local::Vector{Int64},localflag::Bool=true)
 
+    symmetric_flag =  check_cb_symmetric_for_all(EdgesW)
+     
     m,n = size(H)
     # Edges = incidence2elist(H)
     volA = sum(d)
@@ -47,6 +49,7 @@ function SparseCardHyperLocal(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrix
         localflag = false
     end
     A = 0; N = 0;
+    sVec = 0; tVec =0;
     if localflag
 
         if volA*epsilon/volR < 10
@@ -57,8 +60,13 @@ function SparseCardHyperLocal(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrix
 
     else
         # A = tl_expansion_inc(H,order,delta)
-        A = SymmetricCard_reduction(Edges,EdgesW,n,sparsityeps,false)
-        N = round(Int64,size(A,1))
+        if symmetric_flag
+            A = SymmetricCard_reduction(Edges,EdgesW,n,sparsityeps,false)
+            N = round(Int64,size(A,1))
+        else
+            A, sVec, tVec = AsymmetricCard_reduction(Edges,EdgesW,n,sparsityeps,false)
+            N = round(Int64,size(A,1))
+        end
     end
 
     # Store useful sets
@@ -89,9 +97,17 @@ function SparseCardHyperLocal(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrix
 
         stepstart = time()
         if localflag
-            S_new = HyperLocal_Step_General(H,Ht,EdgesW,sparsityeps,order,R,Rn,a_best,epsilon,d,Rs_local)
+            if symmetric_flag
+                S_new = HyperLocal_Step_General(H,Ht,EdgesW,sparsityeps,order,R,Rn,a_best,epsilon,d,Rs_local)
+            else
+                S_new = HyperLocal_Step_General_asym(H,Ht,EdgesW,sparsityeps,order,R,Rn,a_best,epsilon,d,Rs_local, sVec, tVec)
+            end
         else
-            S_new = HLC_Step_General(A,R,Rc,a_best,epsilon,N,d,n,Rs_local)
+            if symmetric_flag
+                S_new = HLC_Step_General(A,R,Rc,a_best,epsilon,N,d,n,Rs_local)
+            else
+                S_new = HLC_Step_General_asym(A,R,Rc,a_best,epsilon,N,d,n,Rs_local, sVec, tVec)
+            end
         end
         stime = round(time()-stepstart,digits=1)
 
@@ -154,12 +170,162 @@ function HLC_Step_General(A::SparseMatrixCSC{Float64,Int64},R::Vector{Int64},Rba
         return S
 end
 
+function HLC_Step_General_asym(A::SparseMatrixCSC{Float64,Int64},R::Vector{Int64},Rbar::Vector{Int64},
+    alpha::Float64, epsilon::Float64, N::Int64, d::Vector{Float64},n::Int64,Rs_local::Vector{Int64}, 
+    sV::Vector{Float64}, tV::Vector{Float64})
+
+        
+        len = length(sV)
+        Rstrong = R[Rs_local]
+        # Directly set up the flow matrix
+        sVec = zeros(N)
+        tVec = zeros(N)
+        sVec[R] .= alpha*d[R]
+        sVec[Rstrong] .= N^2
+        tVec[Rbar] .= alpha*epsilon*d[Rbar]
+        sVec[1:len] = sVec[1:len] .+ sV
+        tVec[1:len] = tVec[1:len] .+ tV
+
+        F = maxflow(A,sVec,tVec,0)
+        Src = source_nodes_min(F)[2:end].-1
+        S = intersect(1:n,Src)
+
+        return S
+end
+
 # Strongly-local subroutine for computing a minimum s-t cut
 # This uses the thresholded linear splitting function for each hyperegde
 function HyperLocal_Step_General(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrixCSC{Float64,Int64},
     EdgesW::Vector{Vector{Float64}},sparsityeps::Float64,
     order::Vector{Int64}, R::Vector{Int64},Rn::Vector{Int64},alpha::Float64,
     epsilon::Float64,d::Vector{Float64},Rs_local::Vector{Int64})
+
+    # Map from local node indices to global node indices
+    Local2Global = [R; Rn]
+
+    n = length(d)
+
+    # Keep track of which nodes are in the local hypergraph L
+    inL = zeros(Bool,n)
+    inL[Local2Global] .= true
+
+    # Number of nodes in the local graph
+    Lsize = length(Local2Global)
+
+    # Complete nodes = nodes whose hyperedge set in the local hypergraph
+    #                   is the same as their global hyperedge set
+    # Incomplete nodes = everything else in the local hypergraph
+    #                   (must be a neighbor of a complete node)
+    #
+    # Initialize the complete set to be R
+    # Incomplete set is R-complement
+    C_global = R
+    I_global = Rn
+
+    # Indices, in the local graph, of complete and incomplete nodes
+    C_local = collect(1:length(R))
+    I_local = collect(length(R)+1:Lsize)
+    R_local = collect(1:length(R))
+    Rstrong_local = R_local[Rs_local]
+
+    # Get the set of hyperedges to expand around.
+    # At first this is every hyperedge that touches
+    # a node from R.
+    Hc = H[:,C_global]
+    rp_c = Hc.rowval
+    # ci_c = Hc.colptr
+    L_edges = unique(rp_c)
+
+    # Binary indicence matrix for the local hypergraph (without terminal edges)
+    HL = H[L_edges,Local2Global]
+    order_L = order[L_edges]
+
+    # Expand into a directed graph
+    # A_L = tl_expansion_inc(HL,order_L,delta)
+    Edges_L = incidence2elist(HL)
+    EdgesW_L = EdgesW[L_edges]
+    A_L = SymmetricCard_reduction(Edges_L,EdgesW_L,Lsize,sparsityeps,false)
+    N_L = size(A_L,1)           # includes auxiliary nodes
+    n_L = length(Local2Global)  # number of non-auxiliary nodes in A_L
+
+    # Find the first mincut, which can be done by calling HLC_Step
+    # with localized objects
+    S_local = HLC_Step_General(A_L,C_local,I_local,alpha,epsilon,N_L,d[Local2Global],n_L,Rstrong_local)
+
+    # Find nodes to "expand" around:
+    #   any nodes in the cut set tha are "incomplete" still
+    E_local = intersect(S_local,I_local)
+    E_global = Local2Global[E_local]
+
+    # ne = length(E_global)
+    # println("There are $ne new nodes to expand on")
+
+    # As long as we have new nodes to expand around, we haven't yet found
+    # the global minimum s-t cut, so we continue.
+    while length(E_local) > 0
+
+        # Update which nodes are complete and which are incomplete
+        C_local = [C_local; E_local]
+        C_global = Local2Global[C_local]
+
+        # Take these away from I_local
+        I_local = setdiff(I_local,E_local)
+
+        # This is better
+        Nbs_of_E = get_immediate_neighbors(H,Ht,E_global)
+        Lnew = setdiff(Nbs_of_E,Local2Global)
+        numNew = length(Lnew)
+        # Update the set of indices in L
+        Local2Global = [Local2Global; Lnew]
+
+        # Store local indices for new nodes added to L
+        Lnew_local = collect((Lsize+1):(Lsize+numNew))
+        Lsize = length(Local2Global)
+
+        # These are going to be "incomplete" nodes
+        I_local = [I_local; Lnew_local]
+        I_global = Local2Global[I_local]
+
+        # Now we have a new set of complete and incomplete edges,
+        # we do the same thing over again to find a localize min-cut
+        Hc = H[:,C_global]
+        rp_c = Hc.rowval
+        # ci_c = Hc.colptr
+        L_edges = unique(rp_c)
+
+        # Binary indicence matrix for the local hypergraph (without terminal edges)
+        HL = H[L_edges,Local2Global]
+        order_L = order[L_edges]
+
+        # Expand into a directed graph
+        # A_L = tl_expansion_inc(HL,order_L,delta)
+        Edges_L = incidence2elist(HL)
+        EdgesW_L = EdgesW[L_edges]
+        A_L = SymmetricCard_reduction(Edges_L,EdgesW_L,Lsize,sparsityeps,false)
+        N_L = size(A_L,1)           # includes auxiliary nodes
+        n_L = length(Local2Global)  # number of non-auxiliary nodes in A_L
+
+        # Find the first mincut, which can be done by calling HLC_Step
+        # with localized objects
+        R_bar_l = setdiff(1:n_L,R_local)
+        S_local = HLC_Step_General(A_L,R_local,R_bar_l,alpha,epsilon,N_L,d[Local2Global],n_L,Rstrong_local)
+
+        # Find nodes to "expand" around:
+        #   any nodes in the cut set tha are "incomplete" still
+        E_local = intersect(S_local,I_local)
+        E_global = Local2Global[E_local]
+        # ne = length(E_global)
+        # println("There are $ne new nodes to expand on")
+    end
+
+    return Local2Global[S_local]
+end
+
+
+function HyperLocal_Step_General_asym(H::SparseMatrixCSC{Float64,Int64},Ht::SparseMatrixCSC{Float64,Int64},
+    EdgesW::Vector{Vector{Float64}},sparsityeps::Float64,
+    order::Vector{Int64}, R::Vector{Int64},Rn::Vector{Int64},alpha::Float64,
+    epsilon::Float64,d::Vector{Float64},Rs_local::Vector{Int64}, sv::Vector{Int64}, tv::Vector{Int64})
 
     # Map from local node indices to global node indices
     Local2Global = [R; Rn]
