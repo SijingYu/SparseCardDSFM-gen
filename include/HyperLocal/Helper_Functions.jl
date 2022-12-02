@@ -484,3 +484,34 @@ function WeightedCliqueExpansion(H::SparseMatrixCSC{Float64,Int64}, order::Vecto
     A = sparse(A+A')
     return A
 end
+
+# For a set S in a graph with adjacency matrix A, return some information about
+# S including its conductance, number of interior edges, volume, and cut.
+function set_stats(A::SparseMatrixCSC{Float64,Int64},
+    S::Vector{Int64},volA::Float64)
+
+    if volA == 0.0
+        volA = sum(A.nzval)
+    end
+
+    if length(S) == size(A,1)
+        # then we have an indicator vector
+        S = findall(x->x!=0,eS)
+        AS = A[:,S]
+    else
+        # then we have a subset
+        @assert(minimum(S) >= 1)
+        @assert(maximum(S) <= size(A,1))
+        AS = A[:,S]
+    end
+
+    vol = sum(AS.nzval);
+    SAS = AS[S,:]
+    edges = sum(SAS.nzval);
+    cut = vol-edges
+
+    cond = cut/minimum([vol,volA-vol]);
+
+    return cut, vol, edges, cond
+
+end
