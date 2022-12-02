@@ -8,6 +8,7 @@ include("../src/hypergraph-clustering-utils.jl")
 
 ## Load in the data
 include("load_stackoverflow.jl")
+so_data = matread("Stackoverflow_data.mat")
 
 ## Generate seed sets
 # NOTE: original seed sets are saved in Seeds folder
@@ -16,7 +17,11 @@ include("load_stackoverflow.jl")
 
 ## Run Hyperlocal+SparseCard with alternative hyperedge cut penalties
 types = ["clique", "x9", "sqrt"]
+Edges = incidence2elist(so_data["H"])
+order = length.(Edges)
+labels = so_data["LabelNames"]
 lnum = length(labels)
+LabelNames = labels
 
 for trial = 1:10
     SS = matread("Seeds/Seed_sets_stack45_$trial.mat")

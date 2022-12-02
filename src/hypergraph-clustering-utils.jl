@@ -1,4 +1,4 @@
-include("../src/PushRelabelMaxFlow.jl")
+include("PushRelabelMaxFlow.jl")
 
 
 function clique_expansion_penalties(k)

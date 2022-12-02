@@ -1,6 +1,6 @@
 using SparseArrays
 
-include("PushRelabelMaxflow.jl")
+include("PushRelabelMaxFlow.jl")
 # include("GurobiMaxflow.jl")
 include("pwl_approx.jl")
 function TwoNodeEdge(w)
