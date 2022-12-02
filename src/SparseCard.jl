@@ -289,3 +289,68 @@ function eval_min_dircut(A,svec,tvec,S,T)
     cutval = F.cutvalue
     return S, cutval
 end
+
+
+
+function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true)
+    if length(epsilon) == 1
+        K = maximum(length(e) for e in Edges)
+        epsilon = epsilon*ones(K)
+    end
+    N = n
+    I = Vector{Int64}()
+    J = Vector{Int64}()
+    W = Vector{Float64}()
+
+    for i = 1:length(Edges)
+        e = Edges[i]
+        w = EdgesW[i]
+        k = length(e)
+        @assert(check_cb_submodular(w))
+
+        if length(w) != k+1
+            println("Give one penalty for each possible set of the cut.")
+            wrong = length(w)
+            right = k+1
+            println("length(w) should be $right, but it's $wrong")
+            return
+        end
+
+        if k == 2
+            # just an edge
+            push!(I,e[1])
+            push!(J,e[2])
+            push!(W,w[2])
+
+            push!(I,e[2])
+            push!(J,e[1])
+            push!(W,w[2])
+
+        else
+            a, b = AsymmetricSCB_to_Gadget(w,epsilon[k])
+
+            @assert(minimum(a) > 0)
+            @assert(minimum(b) > 0)
+
+            L = length(a)
+            for j = 1:L
+                # add one new auxiliary node for this gadget
+                for v in e
+                    push!(I,v)
+                    push!(J,N+1)
+                    push!(W,a[j]*(k-b[j]))
+                    push!(I,N+1)
+                    push!(J,v)
+                    push!(W,a[j]*b[j])
+                end
+                N += 1
+            end
+        end
+    end
+    A = sparse(I,J,W,N,N)
+    if returnIJV
+        return A,I,J,W
+    else
+        return A
+    end
+end

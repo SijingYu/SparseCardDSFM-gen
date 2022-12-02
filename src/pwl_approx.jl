@@ -484,3 +484,26 @@ function clique_round_bound(epsilon)
     """
     return ceil.(log2.(log2.(1 ./ epsilon))) .* ceil.(2*(1 .+ epsilon) ./ sqrt.(2*epsilon))
 end
+
+function AsymmetricSCB_to_Gadget(w, epsi, verbose = false)
+    k = length(w)-1
+    Lines, M, X, Y, Ranges = get_pwl_approx(w,epsi,false)
+    b = zeros(length(X)-1)
+
+    for t = 1:length(X)-1
+        if M[t] == M[t+1]
+            @show r, M
+            @show X, Y
+            @show mlast
+        end
+        x,y = line_intersection(M[t],M[t+1],X[t],X[t+1],Y[t],Y[t+1])
+        b[t] = x
+    end
+
+    a = zeros(length(M)-1)
+    for i = 1:length(a)
+        a[i] = (M[i]- M[i+1])/k
+    end
+    println(M)
+    return a,b
+end
