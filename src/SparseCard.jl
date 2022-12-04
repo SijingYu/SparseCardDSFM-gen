@@ -299,7 +299,7 @@ function z_ks(f_ks)
     return f_ks./collect(1:k)
 end
 
-function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV=true, f_ks)
+function AsymmetricCard_reduction(Edges,EdgesW,n,epsilon,returnIJV,f_ks)
     if length(epsilon) == 1
         K = maximum(length(e) for e in Edges)
         epsilon = epsilon*ones(K)
