@@ -69,7 +69,7 @@ function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float
             println("This iteration uses $iter_time_used")
         end
     end
-
+    time_used = time() - start
     println("=========================== Algorithm end ===========================")
     println("The algorithm uses $time_used")
     return BestS, alphaBest
