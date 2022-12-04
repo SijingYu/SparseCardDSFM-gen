@@ -7,11 +7,15 @@ using StatsBase
 M = MatrixMarket.mmread("minnesota.mtx")
 M_coord = MatrixMarket.mmread("minnesota_coord.mtx")
 to_exclude = sample(collect(1:2642), 10,replace = false)
-CoreCut(SparseMatrixCSC{Float64, Int64}(M),0.05, 0.1,to_exclude)
+@CoreCut(SparseMatrixCSC{Float64, Int64}(M),0.05, 0.1,to_exclude)
 
 function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float64,
     to_exclude::Vector{Int64})
     
+    println("=========================== Starting the algorithm ===========================")
+    start = time()
+
+    println("--------------------------- preparing the graph ---------------------------")
     N = size(G)[1]
     d = sum(G, dims=2)
     volG = sum(d)
@@ -19,16 +23,13 @@ function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float
 
     Edges = [collect(1:N)]
     EdgesW = [(tau * collect(0:N) .* reverse(collect(0:N))/N)[1:Int64((floor(N/2)+1))]]
-    
     A = SymmetricCard_reduction(Edges, EdgesW, N, epsilon, false)
-
     println("Size of the graph: $N nodes")
     println("Number of nodes to exclude: $(length(to_exclude))")
     println("Number of auxiliary nodes: $(size(A,1)-size(G,1))")
-
+    println("Sparsity: $((size(A,1)-size(G,1))/(floor(N/2)+1))")
     A[1:N,1:N] =  A[1:N,1:N] + G
     A_N = size(A)[1]
-
 
     BestS = R
     alpha_old = Inf
@@ -36,8 +37,6 @@ function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float
     alphaBest = alpha_new
 
     counter = 1
-    println("=========================== Starting the algorithm ===========================")
-    start = time()
     while alphaBest < alpha_old
         iter_start = time()
         println("--------------------------- Iteration: $counter ---------------------------")
@@ -76,6 +75,8 @@ function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float
         end
     end
 
+    println("=========================== Algorithm end ===========================")
+    println("The algorithm uses $time_used")
     return BestS, alphaBest
 end
 
