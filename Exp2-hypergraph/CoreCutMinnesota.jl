@@ -7,7 +7,7 @@ using StatsBase
 M = MatrixMarket.mmread("minnesota.mtx")
 M_coord = MatrixMarket.mmread("minnesota_coord.mtx")
 to_exclude = sample(collect(1:2642), 10,replace = false)
-@CoreCut(SparseMatrixCSC{Float64, Int64}(M),0.05, 0.1,to_exclude)
+@time CoreCut(SparseMatrixCSC{Float64, Int64}(M),0.05, 0.1,to_exclude)
 
 function CoreCut(G::SparseMatrixCSC{Float64,Int64}, tau::Float64, epsilon::Float64,
     to_exclude::Vector{Int64})
